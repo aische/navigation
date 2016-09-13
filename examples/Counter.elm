@@ -14,12 +14,13 @@ import String
 
 
 main =
-  Navigation.program urlParser
+  Navigation.programWithFlags' urlParser
     { init = init
     , view = view
     , update = update
     , urlUpdate = urlUpdate
     , subscriptions = subscriptions
+    , getFlags = .flags
     }
 
 
@@ -27,31 +28,37 @@ main =
 -- URL PARSERS - check out evancz/url-parser for fancier URL parsing
 
 
-toUrl : Int -> String
-toUrl count =
-  "#/" ++ toString count
+toUrl : Model -> String
+toUrl model =
+  "#/" ++ model.flags.prefix ++ "/" ++ toString model.counter
 
 
-fromUrl : String -> Result String Int
-fromUrl url =
-  String.toInt (String.dropLeft 2 url)
+fromUrl : Flags -> String -> Result String Int
+fromUrl flags url =
+  String.toInt (String.dropLeft (3 + String.length flags.prefix) url)
 
 
-urlParser : Navigation.Parser (Result String Int)
-urlParser =
-  Navigation.makeParser (fromUrl << .hash)
+urlParser : Flags -> Navigation.Parser (Result String Int)
+urlParser flags =
+  Navigation.makeParser (fromUrl flags << .hash)
 
 
 
 -- MODEL
 
+type alias Flags =
+  { prefix : String
+  } 
 
-type alias Model = Int
+type alias Model = 
+  { counter : Int
+  , flags : Flags
+  }
 
 
-init : Result String Int -> (Model, Cmd Msg)
-init result =
-  urlUpdate result 0
+init : Flags -> Result String Int -> (Model, Cmd Msg)
+init flags result =
+  urlUpdate result { counter = 0, flags = flags }
 
 
 
@@ -72,10 +79,10 @@ update msg model =
     newModel =
       case msg of
         Increment ->
-          model + 1
+          { model | counter = model.counter + 1 }
 
         Decrement ->
-          model - 1
+          { model | counter = model.counter - 1 }
   in
     (newModel, Navigation.newUrl (toUrl newModel))
 
@@ -88,7 +95,7 @@ urlUpdate : Result String Int -> Model -> (Model, Cmd Msg)
 urlUpdate result model =
   case result of
     Ok newCount ->
-      (newCount, Cmd.none)
+      ({ model | counter = newCount }, Cmd.none)
 
     Err _ ->
       (model, Navigation.modifyUrl (toUrl model))

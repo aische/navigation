@@ -1,7 +1,7 @@
 effect module Navigation where { command = MyCmd, subscription = MySub } exposing
   ( back, forward
   , newUrl, modifyUrl
-  , program, programWithFlags
+  , program, programWithFlags, programWithFlags'
   , Parser, makeParser, Location
   )
 
@@ -19,7 +19,7 @@ request to your servers. Instead, you manage the changes yourself in Elm.
 @docs back, forward
 
 # Start your Program
-@docs program, programWithFlags, Parser, makeParser, Location
+@docs program, programWithFlags, programWithFlags', Parser, makeParser, Location
 
 -}
 
@@ -95,6 +95,55 @@ updateHelp : (a -> b) -> (model, Cmd a) -> (model, Cmd b)
 updateHelp func (model, cmds) =
   (model, Cmd.map func cmds)
 
+{-| Works the same as the `programWithFlags` function, but the parser has access to the flags. 
+
+[doc]: http://package.elm-lang.org/packages/elm-lang/html/latest/Html-App#programWithFlags'
+-}
+programWithFlags'
+  : (flags -> Parser data)
+  ->
+    { init : flags -> data -> (model, Cmd msg)
+    , update : msg -> model -> (model, Cmd msg)
+    , urlUpdate : data -> model -> (model, Cmd msg)
+    , view : model -> Html msg
+    , subscriptions : model -> Sub msg
+    , getFlags : model -> flags
+    }
+  -> Program flags
+programWithFlags' mkParser stuff =
+  let
+    update msg model =
+      updateHelp UserMsg <|
+        case msg of
+          Change location ->
+            let (Parser parser) = mkParser (stuff.getFlags model) in
+            stuff.urlUpdate (parser location) model
+
+          UserMsg userMsg ->
+            stuff.update userMsg model
+
+    subs model =
+      Sub.batch
+        [ subscription (Monitor Change)
+        , Sub.map UserMsg (stuff.subscriptions model)
+        ]
+
+    view model =
+      App.map UserMsg (stuff.view model)
+
+    location =
+      Native.Navigation.getLocation ()
+
+    init flags =
+      let (Parser parser) = mkParser flags in
+      updateHelp UserMsg (stuff.init flags (parser location))
+  in
+    App.programWithFlags
+      { init = init
+      , view = view
+      , update = update
+      , subscriptions = subs
+      }
 
 {-| This function augments [`Html.App.program`][doc]. The new things include:
 
